@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 通關密語清單:用戶端完全不能讀寫,只有你在 Firebase Console 手動新增。
+    // 文件 ID 就是密語(例如 ID 設成 maple2026)。
+    match /passwords/{p} {
+      allow read, write: if false;
+    }
+
+    // 解鎖紀錄:匿名使用者提交密語,密語存在於 passwords 才能建立。
+    // 只能讀自己的那份;建立後不能改、不能刪。
+    match /members/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['pass'])
+        && request.resource.data.pass is string
+        && exists(/databases/$(database)/documents/passwords/$(request.resource.data.pass));
+      allow update, delete: if false;
+    }
+
+    // 寶物進度:所有人可讀;已解鎖者只能寫 {next: 0~2 整數}。
+    match /items/{itemId} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && exists(/databases/$(database)/documents/members/$(request.auth.uid))
+        && itemId in ['life-grindstone', 'dark-box', 'life-box', 'white-jade-box', 'faith-grindstone', 'eternal-box']
+        && request.resource.data.keys().hasOnly(['next'])
+        && request.resource.data.next is int
+        && request.resource.data.next >= 0
+        && request.resource.data.next < 3;
+      allow delete: if false;
+    }
+  }
+}
